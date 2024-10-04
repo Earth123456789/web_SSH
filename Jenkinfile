@@ -2,17 +2,16 @@ pipeline {
     agent any
 
     environment {
-        // It's good practice to keep sensitive or specific data like Docker images, remote hosts, and credentials out of the script for security and flexibility.
-        DOCKER_IMAGE    = 'earth12346789/fastapi-webhook:latest' // Ensure this Docker image name is correct and accessible.
-        REMOTE_HOST     = 'earth247god@34.126.181.187' // Replace with your actual username and remote IP.
-        SSH_CREDENTIALS = 'instance' // Use the ID of the Jenkins stored SSH credentials.
+        DOCKER_IMAGE    = 'earth12346789/fastapi-webhook:latest' // Replace with your Docker image
+        REMOTE_HOST     = 'earth247god@34.126.181.187' // Replace with your actual username and remote IP
+        SSH_CREDENTIALS = 'instance' // Jenkins stored SSH credentials ID
     }
 
     stages {
         stage('Login to Docker Hub') {
             steps {
-                // This step logs into Docker Hub using credentials stored in Jenkins.
                 withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'DOCKERHUB_PASSWORD', usernameVariable: 'DOCKERHUB_USER')]) {
+                    // Login to Docker Hub using the stored credentials
                     sh 'echo $DOCKERHUB_PASSWORD | docker login --username $DOCKERHUB_USER --password-stdin'
                 }
             }
@@ -20,14 +19,18 @@ pipeline {
 
         stage('Run Docker on Remote Server') {
             steps {
-                // Uses the SSH Agent plugin to setup SSH credentials.
                 sshagent([SSH_CREDENTIALS]) {
-                    // These commands manage Docker containers on the remote server.
-                    // It stops and removes all containers, then removes all images, before running a new container.
-                    sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker stop \$(docker ps -a -q) || true'"
+                    // Stop and remove containers (ignore errors if none exist)
+                    sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker stop \$(docker ps -q) || true'"
                     sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker rm \$(docker ps -a -q) || true'"
-                    sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker rmi \$(docker images -q) || true'"
+
+                    // Remove all images (use -f to avoid errors on unused images)
+                    sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker rmi -f \$(docker images -q) || true'"
+
+                    // Run the new Docker container
                     sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker run -d --name fastapi-webhook -p 8085:80 $DOCKER_IMAGE'"
+
+                    // List all containers to verify
                     sh "ssh -o StrictHostKeyChecking=no $REMOTE_HOST 'docker ps -a'"
                 }
             }
